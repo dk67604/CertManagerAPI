@@ -8,6 +8,7 @@ let date = require('date-and-time');
 var nano = require('nano')('http://localhost:5984')
 nano.db.create('certmanager');
 var certmanagerdb = nano.db.use('certmanager');
+var request = require('request');
 
 /*
  * Response helper function for nicer code :)
@@ -211,6 +212,39 @@ var insertUser=function (data,result){
 });
 }
 
+var options = {
+  uri: 'http://httpbin.org',
+  method: 'POST',
+  json: {
+    "longUrl": "http://www.google.com/"
+  }
+};
+
+var notify=function(serialnumber,result){
+  console.log('Sending Notifcation to external system');
+  return new Promise(function(resolve,reject){
+    if (result){
+      var options = {
+        uri: 'http://httpbin.org/post',
+        method: 'POST',
+        json: {
+          "serialnumber": serialnumber,
+          "result":result
+        }
+      };
+      request(options, function (error, response, body) {
+        //console.log(response);
+   if (!error && response.statusCode == 200) {
+     console.log(body.id) // Print the shortened url.
+     resolve(response);
+   }
+ });
+    }else {
+      resolve('Fail to notify');
+    }
+  });
+};
+
 var removeUser=function(result){
   console.log('Removing requested user');
 
@@ -361,15 +395,18 @@ var deactivateCert=function(req,res){
   var auth=req.body.auth;
   var username=auth.username;
   var password=auth.password;
+  var serialnumber=data.serialnumber;
   var passhash = crypto.createHash('sha256').update(password).digest('base64');
-  checkUser(username,auth.email).then(checkLogin.bind(null,passhash)).then(deactivateCertificate.bind(null,data.serialnumber)).
-  then(function(result){
-    var response={status:'true',certificate:result}
+  checkUser(username,auth.email).then(checkLogin.bind(null,passhash)).then(deactivateCertificate.bind(null,data.serialnumber))
+    .then(notify.bind(null,serialnumber)).then(function(result){
+    var response={result}
     respond(response,res);
   }).catch(function(error){
     errorresponse(error,res);
   });
 };
+
+
 
 var activateCert=function(req,res){
   var data=req.body.data;
@@ -377,9 +414,12 @@ var activateCert=function(req,res){
   var username=auth.username;
   var password=auth.password;
   var passhash = crypto.createHash('sha256').update(password).digest('base64');
-  checkUser(username,auth.email).then(checkLogin.bind(null,passhash)).then(activateCertificate.bind(null,data.serialnumber)).
-  then(function(result){
-    var response={status:'true',certificate:result}
+  var serialnumber=data.serialnumber;
+  console.log(serialnumber);
+  checkUser(username,auth.email).then(checkLogin.bind(null,passhash)).
+  then(activateCertificate.bind(null,data.serialnumber))
+  .then(notify.bind(null,serialnumber)).then(function(result){
+    var response={result}
     respond(response,res);
   }).catch(function(error){
     errorresponse(error,res);
